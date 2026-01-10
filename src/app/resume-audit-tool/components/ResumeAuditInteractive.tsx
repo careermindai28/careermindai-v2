@@ -161,7 +161,7 @@ export default function ResumeAuditInteractive() {
   // (true server PDF export is for resume/cover-letter/interview guide, which use /api/pdf-export)
   try {
     const html = document.documentElement.outerHTML;
-    const w = window.open('', '_blank', 'noopener,noreferrer');
+    const w = window.location.href('', '_blank', 'noopener,noreferrer');
     if (!w) return;
 
     w.document.open();

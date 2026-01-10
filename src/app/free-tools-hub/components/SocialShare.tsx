@@ -38,7 +38,7 @@ const SocialShare = ({ className = '' }: SocialShareProps) => {
     }
 
     if (url) {
-      window.open(url, '_blank', 'width=600,height=400');
+      window.location.href(url, '_blank', 'width=600,height=400');
     }
   };
 
