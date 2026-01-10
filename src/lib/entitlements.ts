@@ -1,30 +1,63 @@
-export type Plan = 'FREE' | 'PAID' | 'ADMIN';
+export type PlanTier = 'FREE' | 'STARTER' | 'PRO' | 'ADMIN';
 
 export type Entitlements = {
-  plan: Plan;
-  canExportPdf: boolean;
-  exportLimitPerDay: number; // FREE: 1/day; PAID/ADMIN: 999/day
-  watermarkOnExports: boolean; // FREE true, PAID false
+  plan: 'FREE' | 'STARTER' | 'PRO' | 'ADMIN';
+  tier: PlanTier;
+  exportLimitPerDay: number;
+  watermarkOnExports: boolean;
 };
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
-  .split(',')
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
+export function normalizePlan(plan: any): PlanTier {
+  const p = String(plan || 'FREE').toUpperCase();
+  if (p === 'ADMIN') return 'ADMIN';
+  if (p === 'PRO') return 'PRO';
+  if (p === 'STARTER') return 'STARTER';
+  if (p === 'PAID') return 'PRO'; // backward compat
+  return 'FREE';
+}
 
-export function getEntitlements(plan: Plan, email?: string | null): Entitlements {
-  // ✅ Email-based admin override
-  if (email && ADMIN_EMAILS.includes(email.toLowerCase())) {
-    return { plan: 'ADMIN', canExportPdf: true, exportLimitPerDay: 999, watermarkOnExports: false };
+export function isAdminEmail(email?: string | null) {
+  return (email || '').toLowerCase() === 'careermindai28@gmail.com';
+}
+
+/**
+ * Export + watermark entitlements used by /api/pdf-export and others.
+ */
+export function getEntitlements(plan: any, email?: string | null): Entitlements {
+  const admin = isAdminEmail(email);
+  const tier: PlanTier = admin ? 'ADMIN' : normalizePlan(plan);
+
+  if (tier === 'ADMIN') {
+    return {
+      plan: 'ADMIN',
+      tier,
+      exportLimitPerDay: 999999,
+      watermarkOnExports: false,
+    };
   }
 
-  if (plan === 'ADMIN') {
-    return { plan, canExportPdf: true, exportLimitPerDay: 999, watermarkOnExports: false };
+  if (tier === 'PRO') {
+    return {
+      plan: 'PRO',
+      tier,
+      exportLimitPerDay: 999999,
+      watermarkOnExports: false,
+    };
   }
 
-  if (plan === 'PAID') {
-    return { plan, canExportPdf: true, exportLimitPerDay: 999, watermarkOnExports: false };
+  if (tier === 'STARTER') {
+    return {
+      plan: 'STARTER',
+      tier,
+      exportLimitPerDay: 10,
+      watermarkOnExports: true,
+    };
   }
 
-  return { plan: 'FREE', canExportPdf: true, exportLimitPerDay: 1, watermarkOnExports: true };
+  return {
+    plan: 'FREE',
+    tier,
+    exportLimitPerDay: 1,
+    watermarkOnExports: true,
+  };
 }

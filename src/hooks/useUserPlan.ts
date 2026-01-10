@@ -4,63 +4,89 @@ import { useEffect, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { getFirebaseDb, isFirebaseReady } from '@/lib/firebaseClient';
+import { isAdminEmail, normalizePlan, PlanTier } from '@/lib/entitlements';
 
-export type PlanTier = 'FREE' | 'STARTER' | 'PRO';
+export type { PlanTier };
 
-export type UserPlan = {
-  tier: PlanTier;
-  paidUntil?: string;
-  isActive: boolean;
+type PlanState = {
   loading: boolean;
+  tier: PlanTier;
+  paidUntil?: number | null; // ms epoch
 };
 
-function parseTier(v: any): PlanTier {
-  const s = String(v || '').toUpperCase();
-  if (s === 'PRO') return 'PRO';
-  if (s === 'STARTER') return 'STARTER';
-  return 'FREE';
+function nowMs() {
+  return Date.now();
 }
 
-function isActiveUntil(paidUntil?: string) {
-  if (!paidUntil) return false;
-  const t = Date.parse(paidUntil);
-  if (!Number.isFinite(t)) return false;
-  return t > Date.now();
+function parsePaidUntil(v: any): number | null {
+  if (!v) return null;
+  if (typeof v?.toMillis === 'function') return v.toMillis(); // Firestore Timestamp
+  if (typeof v === 'string') {
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : null;
+  }
+  if (typeof v === 'number') return v;
+  return null;
 }
 
-export function useUserPlan(): UserPlan {
-  const { user } = useAuth();
-  const [state, setState] = useState<UserPlan>({ tier: 'FREE', isActive: false, loading: true });
+export function useUserPlan(): PlanState {
+  const { user, firebaseReady } = useAuth();
+  const [state, setState] = useState<PlanState>({
+    loading: true,
+    tier: 'FREE',
+    paidUntil: null,
+  });
 
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
-      // Not signed in => free
-      if (!user || !isFirebaseReady()) {
-        if (!cancelled) setState({ tier: 'FREE', isActive: false, loading: false });
+      // default to FREE if firebase not ready
+      if (!firebaseReady || !isFirebaseReady()) {
+        if (!cancelled) setState({ loading: false, tier: 'FREE', paidUntil: null });
+        return;
+      }
+
+      if (!user) {
+        if (!cancelled) setState({ loading: false, tier: 'FREE', paidUntil: null });
+        return;
+      }
+
+      // ✅ Admin override always unlocks
+      if (isAdminEmail(user.email)) {
+        if (!cancelled) setState({ loading: false, tier: 'ADMIN', paidUntil: null });
         return;
       }
 
       try {
         const db = getFirebaseDb();
-        const snap = await getDoc(doc(db, 'users', user.uid));
-        const d = snap.exists() ? (snap.data() as any) : {};
-        const tier = parseTier(d?.plan);
-        const paidUntil = typeof d?.paidUntil === 'string' ? d.paidUntil : undefined;
-        const active = tier !== 'FREE' && isActiveUntil(paidUntil);
-        if (!cancelled)
-          setState({ tier: active ? tier : 'FREE', paidUntil, isActive: active, loading: false });
+        const ref = doc(db, 'users', user.uid);
+        const snap = await getDoc(ref);
+        const data = snap.exists() ? snap.data() : {};
+
+        const tier = normalizePlan((data as any)?.plan);
+        const paidUntil = parsePaidUntil((data as any)?.paidUntil);
+
+        // If paidUntil exists and expired => FREE
+        if ((tier === 'STARTER' || tier === 'PRO') && paidUntil && paidUntil < nowMs()) {
+          if (!cancelled) setState({ loading: false, tier: 'FREE', paidUntil });
+          return;
+        }
+
+        if (!cancelled) setState({ loading: false, tier, paidUntil });
       } catch {
-        if (!cancelled) setState({ tier: 'FREE', isActive: false, loading: false });
+        if (!cancelled) setState({ loading: false, tier: 'FREE', paidUntil: null });
       }
     }
 
-    run();
+    // set loading true on user changes
+    setState((prev) => ({ ...prev, loading: true }));
+    void run();
+
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, firebaseReady]);
 
   return state;
 }

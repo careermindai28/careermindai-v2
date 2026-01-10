@@ -192,8 +192,7 @@ const PricingInteractive = () => {
   const faqs: FAQ[] = [
     {
       question: 'Is this a subscription?',
-      answer:
-        'No. Starter and Pro are one-time passes valid for 30 days. You can renew anytime.',
+      answer: 'No. Starter and Pro are one-time passes valid for 30 days. You can renew anytime.',
     },
     {
       question: 'Do I need to login to use the free audit?',
@@ -202,8 +201,7 @@ const PricingInteractive = () => {
     },
     {
       question: 'Can I upgrade from Starter to Pro later?',
-      answer:
-        'Yes. You can upgrade anytime and unlock Pro tools immediately.',
+      answer: 'Yes. You can upgrade anytime and unlock Pro tools immediately.',
     },
     {
       question: 'Do you offer refunds?',
@@ -253,7 +251,7 @@ const PricingInteractive = () => {
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
         {pricingPlans.map((plan, index) => (
-          <PricingCard key={index} {...plan} billingType="monthly" />
+          <PricingCard key={index} {...plan} />
         ))}
       </section>
 

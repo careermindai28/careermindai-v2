@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Icon from '@/components/ui/AppIcon';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { getFirebaseAuth } from '@/lib/firebaseClient';
+import { signOut } from 'firebase/auth';
 
 interface PublicHeaderProps {
   className?: string;
@@ -39,6 +41,17 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
     { label: 'Free Tools', path: ROUTES.freeTools },
   ];
 
+  const toggleMobileMenu = () => setIsMobileMenuOpen((v) => !v);
+
+  const doLogout = async () => {
+    try {
+      await signOut(getFirebaseAuth());
+      window.location.href = ROUTES.landing;
+    } catch {
+      // no-op
+    }
+  };
+
   // Primary CTA:
   // - logged in  -> dashboard
   // - logged out -> sign-in then resume-audit-tool
@@ -51,17 +64,9 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
   const primaryCtaLabel = loading ? 'Loading…' : user ? 'Go to Dashboard' : 'Get Started';
 
   // Secondary CTA:
-  // - logged in  -> dashboard
   // - logged out -> sign-in then return to current page
-  const secondaryCtaHref = loading
-    ? ROUTES.signIn
-    : user
-      ? ROUTES.dashboard
-      : withNext(ROUTES.signIn, pathname);
-
-  const secondaryCtaLabel = loading ? 'Login' : user ? 'Dashboard' : 'Login';
-
-  const toggleMobileMenu = () => setIsMobileMenuOpen((v) => !v);
+  const secondaryCtaHref = loading ? ROUTES.signIn : withNext(ROUTES.signIn, pathname);
+  const secondaryCtaLabel = loading ? 'Login' : 'Login';
 
   return (
     <header className={`bg-surface border-b border-border sticky top-0 z-1000 ${className}`}>
@@ -97,16 +102,26 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
           </nav>
 
           <div className="hidden md:flex items-center space-x-4">
-            <Link
-              href={secondaryCtaHref}
-              className="text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
-              aria-disabled={loading}
-              onClick={(e) => {
-                if (loading) e.preventDefault();
-              }}
-            >
-              {secondaryCtaLabel}
-            </Link>
+            {user ? (
+              <button
+                onClick={doLogout}
+                className="text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
+                disabled={loading}
+              >
+                Logout
+              </button>
+            ) : (
+              <Link
+                href={secondaryCtaHref}
+                className="text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
+                aria-disabled={loading}
+                onClick={(e) => {
+                  if (loading) e.preventDefault();
+                }}
+              >
+                {secondaryCtaLabel}
+              </Link>
+            )}
 
             <Link
               href={primaryCtaHref}
@@ -149,14 +164,27 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
             ))}
 
             <div className="pt-3 border-t border-border space-y-3">
-              <Link
-                href={secondaryCtaHref}
-                className="block py-2 text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}
-                aria-disabled={loading}
-              >
-                {secondaryCtaLabel}
-              </Link>
+              {user ? (
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    void doLogout();
+                  }}
+                  className="block w-full text-left py-2 text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
+                  disabled={loading}
+                >
+                  Logout
+                </button>
+              ) : (
+                <Link
+                  href={secondaryCtaHref}
+                  className="block py-2 text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  aria-disabled={loading}
+                >
+                  {secondaryCtaLabel}
+                </Link>
+              )}
 
               <Link
                 href={primaryCtaHref}

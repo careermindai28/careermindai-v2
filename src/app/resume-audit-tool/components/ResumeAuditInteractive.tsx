@@ -157,8 +157,41 @@ export default function ResumeAuditInteractive() {
   };
 
   const handleExportPDF = () => {
-    alert('PDF export will be enabled in the next phase.');
-  };
+  // Works immediately: opens a print-friendly page of the audit results and user can "Save as PDF"
+  // (true server PDF export is for resume/cover-letter/interview guide, which use /api/pdf-export)
+  try {
+    const html = document.documentElement.outerHTML;
+    const w = window.open('', '_blank', 'noopener,noreferrer');
+    if (!w) return;
+
+    w.document.open();
+    w.document.write(`
+      <html>
+        <head>
+          <title>CareerMindAI - Resume Audit</title>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            .no-print { display: none; }
+          </style>
+        </head>
+        <body>
+          <h1>CareerMindAI — Resume Audit Summary</h1>
+          <p style="color:#666">Tip: Use your browser’s Print → Save as PDF.</p>
+          <hr/>
+          ${document.querySelector('.max-w-5xl')?.innerHTML || ''}
+          <script>
+            window.onload = () => setTimeout(() => window.print(), 400);
+          </script>
+        </body>
+      </html>
+    `);
+    w.document.close();
+  } catch {
+    alert('Export failed. Please try again.');
+  }
+};
+
 
   const handleStartOver = () => {
     setSelectedFile(null);
@@ -246,7 +279,6 @@ export default function ResumeAuditInteractive() {
               <div>
                 <div className="text-sm text-text-secondary">Next step</div>
                 <div className="font-semibold">Build AI Resume from this Audit</div>
-                <div className="text-xs text-text-secondary break-all">Audit ID: {auditId}</div>
               </div>
               <button
                 onClick={handleBuildResume}

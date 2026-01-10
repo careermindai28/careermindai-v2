@@ -36,9 +36,8 @@ async function getUserPlanAndUsage(uid: string) {
   const snap = await ref.get();
 
   const data = snap.exists ? (snap.data() as any) : {};
-  const plan: Plan = (data?.plan as Plan) || 'FREE';
-  const isAdmin = Boolean(data?.isAdmin);
-  const finalPlan: Plan = isAdmin ? 'ADMIN' : plan;
+  const plan = (data?.plan as string) || 'FREE';
+  const paidUntil = data?.paidUntil || null; // Firestore Timestamp or string
 
   const today = ymd();
   const exports = data?.exports || {};
@@ -46,8 +45,9 @@ async function getUserPlanAndUsage(uid: string) {
   const exportsCount = Number(exports?.count || 0);
   const todaysCount = exportsDate === today ? exportsCount : 0;
 
-  return { ref, finalPlan, today, todaysCount };
+  return { ref, plan, paidUntil, today, todaysCount };
 }
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -100,8 +100,26 @@ export async function POST(req: NextRequest) {
     }
 
     // ✅ Monetization rules
-    const { ref, finalPlan, today, todaysCount } = await getUserPlanAndUsage(uid);
-    const ent = getEntitlements(finalPlan, email);
+    
+    const { ref, plan, paidUntil, today, todaysCount } = await getUserPlanAndUsage(uid);
+
+// if paidUntil exists but is expired, treat as FREE
+let effectivePlan = plan;
+try {
+  const ms =
+    typeof paidUntil?.toMillis === 'function'
+      ? paidUntil.toMillis()
+      : typeof paidUntil === 'string'
+        ? Date.parse(paidUntil)
+        : typeof paidUntil === 'number'
+          ? paidUntil
+          : NaN;
+
+  if (Number.isFinite(ms) && ms < Date.now()) effectivePlan = 'FREE';
+} catch {}
+
+const ent = getEntitlements(effectivePlan, email);
+
 
     if (todaysCount >= ent.exportLimitPerDay) {
       return new Response(

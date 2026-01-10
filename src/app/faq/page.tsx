@@ -56,7 +56,7 @@ const faqData: FAQItem[] = [
     category: 'Pricing & Billing',
     question: 'How does pricing and billing work?',
     answer:
-      'We offer three plans: Free (₹0/month) with basic resume audit and limited tools; Starter (₹499/month) for active job seekers who need full access to all tools; and Pro (₹999/month) for power users who want maximum features and higher usage limits. All paid plans are billed monthly and can be cancelled anytime.',
+              'We offer three passes: Free (₹0) with 1 lifetime resume audit per device; Starter Pass (₹99 for 30 days) for active job seekers; and Pro Pass (₹199 for 30 days) for power users who want premium tools and maximum usage. These are one-time passes valid for 30 days (not subscriptions).',
   },
   {
     category: 'Pricing & Billing',
