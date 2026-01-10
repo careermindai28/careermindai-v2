@@ -30,6 +30,17 @@ export function verifyPdfUrl(params: {
   const now = Math.floor(Date.now() / 1000);
   if (!params.exp || params.exp < now) return false;
 
-  const expected = signPdfUrl({ type: params.type, id: params.id, exp: params.exp });
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(params.sig));
+  // Avoid throwing on bad input
+  let expected = '';
+  try {
+    expected = signPdfUrl({ type: params.type, id: params.id, exp: params.exp });
+  } catch {
+    return false;
+  }
+
+  const a = Buffer.from(expected);
+  const b = Buffer.from(String(params.sig || ''));
+  if (a.length !== b.length) return false;
+
+  return crypto.timingSafeEqual(a, b);
 }

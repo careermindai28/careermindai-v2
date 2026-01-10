@@ -90,7 +90,9 @@ export async function startRazorpayCheckout(args: StartCheckoutArgs) {
       amount: order.amount,
       currency: order.currency,
       name: 'CareerMindAI',
-      description: 'CareerMindAI Pro Pass (30 days)',
+      description: args.plan === 'PASS_30D_199'
+  ? 'CareerMindAI Pro Pass (30 days)'
+  : 'CareerMindAI Starter Pass (30 days)',
       handler: async (resp: any) => {
         const vr = await fetch('/api/razorpay/verify', {
           method: 'POST',

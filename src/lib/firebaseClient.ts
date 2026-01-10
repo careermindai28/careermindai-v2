@@ -67,7 +67,6 @@ export const db = getFirebaseDb();
 export function isFirebaseReady(): boolean {
   try {
     const config = getFirebaseConfig();
-
     // Basic config presence check
     if (!config.apiKey || !config.authDomain || !config.projectId || !config.appId) {
       console.error(

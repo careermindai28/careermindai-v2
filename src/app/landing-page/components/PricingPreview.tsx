@@ -1,18 +1,18 @@
-import Link from 'next/link';
-import Icon from '@/components/ui/AppIcon';
+import Link from 'next/link'
+import Icon from '@/components/ui/AppIcon'
 
 interface PricingTier {
-  name: string;
-  price: string;
-  period: string;
-  description: string;
-  features: string[];
-  cta: string;
-  highlighted: boolean;
+  name: string
+  price: string
+  period: string
+  description: string
+  features: string[]
+  cta: string
+  highlighted: boolean
 }
 
 interface PricingPreviewProps {
-  className?: string;
+  className?: string
 }
 
 const PricingPreview = ({ className = '' }: PricingPreviewProps) => {
@@ -21,50 +21,49 @@ const PricingPreview = ({ className = '' }: PricingPreviewProps) => {
       name: 'Free',
       price: '₹0',
       period: 'forever',
-      description: 'Perfect for getting started with basic career tools',
+      description: 'Try CareerMindAI risk-free and see real value before you commit.',
       features: [
-        '1 Resume Audit per month',
-        'Basic ATS Score',
+        '1 FREE Resume Audit (lifetime per device)',
+        'ResumeMind Score™ + breakdown',
         'Free Tools Hub access',
-        'Community support',
+        'Email capture to save your audit',
       ],
-      cta: 'Get Started',
+      cta: 'Start Free Audit',
       highlighted: false,
     },
     {
-      name: 'Starter',
-      price: '₹499',
-      period: 'per month',
-      description: 'Ideal for active job seekers with regular applications',
+      name: 'Starter Pass',
+      price: '₹99',
+      period: 'for 30 days',
+      description: 'For active job seekers — build, apply, and improve faster.',
       features: [
-        '10 Resume Audits per month',
+        'Everything in Free',
         'AI Resume Builder',
-        '5 Cover Letters',
-        'Interview Prep (Basic)',
-        'LinkedIn Optimization',
-        'Priority email support',
+        'Interview Cheat Sheet (PDF)',
+        'LinkedIn Post Generator',
+        'CareerPath Generator',
+        'Multiple resume versions (role-based)',
       ],
-      cta: 'Start Free Trial',
+      cta: 'Upgrade to Starter',
       highlighted: true,
     },
     {
-      name: 'Pro',
-      price: '₹999',
-      period: 'per month',
-      description: 'Complete toolkit for serious career advancement',
+      name: 'Pro Pass',
+      price: '₹199',
+      period: 'for 30 days',
+      description: 'Full suite — advanced tools + premium differentiators.',
       features: [
-        'Unlimited Resume Audits',
-        'AI Resume Builder (Advanced)',
-        'Unlimited Cover Letters',
-        'Interview Prep (Advanced)',
-        'LinkedIn Optimization (Pro)',
-        'Career Coaching Sessions',
-        '24/7 Priority support',
+        'Everything in Starter',
+        'Resume Translation (English ↔ Hindi + more)',
+        'Government Resume Formats (UPSC/SSC etc.)',
+        'Resume Heatmap (attention insights)',
+        'Salary Analyzer (strategy + ranges)',
+        'Priority support',
       ],
       cta: 'Go Pro',
       highlighted: false,
     },
-  ];
+  ]
 
   return (
     <section className={`bg-background py-20 ${className}`}>
@@ -74,17 +73,16 @@ const PricingPreview = ({ className = '' }: PricingPreviewProps) => {
             Simple, Transparent Pricing
           </h2>
           <p className="text-lg text-text-secondary max-w-2xl mx-auto">
-            Choose the plan that fits your career goals. All plans include core features.
+            Pay once. Get access for 30 days. Upgrade anytime.
           </p>
         </div>
+
         <div className="grid md:grid-cols-3 gap-8 mb-12">
           {pricingTiers.map((tier) => (
             <div
               key={tier.name}
               className={`bg-surface border rounded-xl p-8 shadow-card hover:shadow-elevation transition-all duration-150 ${
-                tier.highlighted
-                  ? 'border-primary ring-2 ring-primary/20 scale-105'
-                  : 'border-border'
+                tier.highlighted ? 'border-primary ring-2 ring-primary/20 scale-105' : 'border-border'
               }`}
             >
               {tier.highlighted && (
@@ -92,12 +90,16 @@ const PricingPreview = ({ className = '' }: PricingPreviewProps) => {
                   Most Popular
                 </div>
               )}
+
               <h3 className="text-2xl font-bold text-foreground mb-2">{tier.name}</h3>
+
               <div className="mb-4">
                 <span className="text-4xl font-bold text-foreground">{tier.price}</span>
-                <span className="text-text-secondary ml-2">/ {tier.period}</span>
+                <span className="text-text-secondary ml-2">{tier.period}</span>
               </div>
+
               <p className="text-text-secondary mb-6">{tier.description}</p>
+
               <Link
                 href="/pricing-plans"
                 className={`block w-full text-center py-3 rounded-lg font-semibold transition-all duration-150 mb-6 ${
@@ -108,6 +110,7 @@ const PricingPreview = ({ className = '' }: PricingPreviewProps) => {
               >
                 {tier.cta}
               </Link>
+
               <ul className="space-y-3">
                 {tier.features.map((feature, index) => (
                   <li key={index} className="flex items-start gap-3">
@@ -124,6 +127,7 @@ const PricingPreview = ({ className = '' }: PricingPreviewProps) => {
             </div>
           ))}
         </div>
+
         <div className="text-center">
           <Link
             href="/pricing-plans"
@@ -135,7 +139,7 @@ const PricingPreview = ({ className = '' }: PricingPreviewProps) => {
         </div>
       </div>
     </section>
-  );
-};
+  )
+}
 
-export default PricingPreview;
+export default PricingPreview

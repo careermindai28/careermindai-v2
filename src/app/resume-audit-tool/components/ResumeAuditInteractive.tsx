@@ -48,6 +48,24 @@ interface AuditResultsData {
   roleFitNotes?: string;
 }
 
+const FREE_AUDIT_KEY = 'cm_free_audit_used_v1';
+
+function getFreeAuditUsed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(FREE_AUDIT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markFreeAuditUsed() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(FREE_AUDIT_KEY, '1');
+  } catch {}
+}
+
 export default function ResumeAuditInteractive() {
   const router = useRouter();
   const { user } = useAuth();
@@ -65,10 +83,7 @@ export default function ResumeAuditInteractive() {
 
   useEffect(() => {
     setIsHydrated(true);
-    try {
-      const used = window.localStorage.getItem('cm_free_audit_used') === '1';
-      setFreeAuditUsed(used);
-    } catch {}
+    setFreeAuditUsed(getFreeAuditUsed());
   }, []);
 
   const auditId = useMemo(
@@ -86,7 +101,7 @@ export default function ResumeAuditInteractive() {
   const handleAnalyze = async () => {
     if (!validateForm()) return;
 
-    // One free audit without login. After that, require sign-in.
+    // ✅ 1 free audit lifetime per device (for guests)
     if (!user && freeAuditUsed) {
       setApiError(
         'You’ve already used your free audit on this device. Please sign in to run more audits and save your results.'
@@ -113,11 +128,11 @@ export default function ResumeAuditInteractive() {
 
       setAuditResults(data);
 
+      // ✅ mark only on success
       if (!user) {
-        try {
-          window.localStorage.setItem('cm_free_audit_used', '1');
-          setFreeAuditUsed(true);
-        } catch {}
+        markFreeAuditUsed();
+        setFreeAuditUsed(true);
+
         // Ask for email after showing value (Grammarly-style)
         setTimeout(() => setEmailModalOpen(true), 250);
       }
@@ -241,11 +256,7 @@ export default function ResumeAuditInteractive() {
               </button>
             </div>
 
-            <AuditResults
-              results={auditResults}
-              onExportPDF={handleExportPDF}
-              onStartOver={handleStartOver}
-            />
+            <AuditResults results={auditResults} onExportPDF={handleExportPDF} onStartOver={handleStartOver} />
           </>
         )}
       </div>
