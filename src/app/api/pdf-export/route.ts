@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     }
     if (!isPdfType(rawType)) {
       return Response.json(
-        { ok: false, error: `Invalid type. Must be one of: resume, coverLetter, interviewGuide` },
+        { ok: false, error: 'Invalid type. Must be: resume | coverLetter | interviewGuide' },
         { status: 400 }
       );
     }
@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
 
     let uid = '';
     let email: string | null = null;
+
     try {
       const decoded = await getAdminAuth().verifyIdToken(token);
       uid = decoded.uid;
@@ -130,20 +131,24 @@ export async function POST(req: NextRequest) {
 
     const wm = ent.watermarkOnExports ? '1' : '0';
 
+    // Long expiry so it won’t expire mid-render
     const exp = Math.floor(Date.now() / 1000) + 60 * 60; // 1 hour
     const sig = signPdfUrl({ type, id, exp });
 
     let printUrl = '';
     if (type === 'resume') {
-      printUrl = `${baseUrl}/print/resume?builderId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      printUrl = `${baseUrl}/print/resume?builderId=${encodeURIComponent(
+        id
+      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else if (type === 'coverLetter') {
-      printUrl = `${baseUrl}/print/cover-letter?coverLetterId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      printUrl = `${baseUrl}/print/cover-letter?coverLetterId=${encodeURIComponent(
+        id
+      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else {
-      printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(
+        id
+      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     }
-
-    // If you ever need to debug signature issues, temporarily return this JSON:
-     return Response.json({ ok: true, debug: { type, id, exp, sig, printUrl } });
 
     const executablePath = await chromium.executablePath();
 
@@ -161,23 +166,44 @@ export async function POST(req: NextRequest) {
     const page = await browser.newPage();
     await page.setViewport({ width: 1240, height: 1754, deviceScaleFactor: 1 });
 
-    await page.goto(printUrl, { waitUntil: 'networkidle2', timeout: 60_000 });
+    const resp = await page.goto(printUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    const status = resp?.status() || 0;
 
-    const pdfBuffer = await page.pdf({
+    // Wait for page to settle
+    await page.waitForTimeout(600);
+    await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30_000 });
+
+    // Detect Unauthorized / Not found pages before pdf()
+    const bodyText = await page.evaluate(() => document.body?.innerText || '');
+    if (status >= 400 || /Unauthorized|Invalid or expired link|Not found/i.test(bodyText)) {
+      throw new Error(`PRINT_PAGE_REJECTED: status=${status} text=${bodyText.slice(0, 120)}`);
+    }
+
+    const pdfBuffer: Buffer = await page.pdf({
       format: 'A4',
       printBackground: true,
       displayHeaderFooter: false,
       margin: { top: '14mm', right: '14mm', bottom: '14mm', left: '14mm' },
     });
 
+    // Validate PDF bytes
+    if (!pdfBuffer || pdfBuffer.length < 100) {
+      throw new Error(`EMPTY_PDF_BUFFER: length=${pdfBuffer?.length || 0}`);
+    }
+    const header = pdfBuffer.slice(0, 4).toString('utf8');
+    if (header !== '%PDF') {
+      throw new Error(`INVALID_PDF_HEADER: got=${JSON.stringify(header)}`);
+    }
+
     await ref.set({ exports: { date: today, count: todaysCount + 1 } }, { merge: true });
 
-    return new Response(new Uint8Array(pdfBuffer), {
+    return new Response(pdfBuffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${safeFilename(type)}"`,
         'Cache-Control': 'no-store',
+        'X-PDF-Bytes': String(pdfBuffer.length),
       },
     });
   } catch (err: any) {
