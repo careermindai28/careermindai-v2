@@ -38,13 +38,12 @@ async function getUserPlanAndUsage(uid: string) {
 
   const data = snap.exists ? (snap.data() as any) : {};
   const plan = data?.plan || 'FREE';
-  const paidUntil = data?.paidUntil || null;
 
   const today = ymd();
   const exports = data?.exports || {};
   const todaysCount = exports?.date === today ? Number(exports?.count || 0) : 0;
 
-  return { ref, plan, paidUntil, today, todaysCount };
+  return { ref, plan, today, todaysCount };
 }
 
 export async function POST(req: NextRequest) {
@@ -70,55 +69,69 @@ export async function POST(req: NextRequest) {
     const uid = decoded.uid;
     const email = (decoded as any)?.email || null;
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
     if (!baseUrl) throw new Error('Missing NEXT_PUBLIC_APP_URL');
 
-    const { ref, plan, paidUntil, today, todaysCount } = await getUserPlanAndUsage(uid);
+    const { ref, plan, today, todaysCount } = await getUserPlanAndUsage(uid);
     const ent = getEntitlements(plan, email);
 
     if (todaysCount >= ent.exportLimitPerDay) {
-      return Response.json(
-        { ok: false, error: 'Daily export limit reached' },
-        { status: 402 }
-      );
+      return Response.json({ ok: false, error: 'Daily export limit reached' }, { status: 402 });
     }
 
     const wm = ent.watermarkOnExports ? '1' : '0';
+
+    // Long expiry so it won’t expire mid-render
     const exp = Math.floor(Date.now() / 1000) + 60 * 60;
     const sig = signPdfUrl({ type, id, exp });
 
+    // ✅ CRITICAL: URL-encode signature
+    const sigEncoded = encodeURIComponent(sig);
+
     const printUrl =
       type === 'resume'
-        ? `${baseUrl}/print/resume?builderId=${id}&wm=${wm}&exp=${exp}&sig=${sig}`
+        ? `${baseUrl}/print/resume?builderId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${sigEncoded}`
         : type === 'coverLetter'
-        ? `${baseUrl}/print/cover-letter?coverLetterId=${id}&wm=${wm}&exp=${exp}&sig=${sig}`
-        : `${baseUrl}/print/interview-guide?guideId=${id}&wm=${wm}&exp=${exp}&sig=${sig}`;
+        ? `${baseUrl}/print/cover-letter?coverLetterId=${encodeURIComponent(
+            id
+          )}&wm=${wm}&exp=${exp}&sig=${sigEncoded}`
+        : `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(
+            id
+          )}&wm=${wm}&exp=${exp}&sig=${sigEncoded}`;
 
     const executablePath = await chromium.executablePath();
 
     browser = await puppeteer.launch({
       executablePath,
       headless: chromium.headless,
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+      ],
     });
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1240, height: 1754 });
 
-    const response = await page.goto(printUrl, { waitUntil: 'domcontentloaded' });
+    await page.goto(printUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
-    // ✅ SAFE wait — compatible with ALL puppeteer versions
-    await new Promise((r) => setTimeout(r, 800));
+    // ✅ Safe settle wait (older puppeteer compatible)
+    await new Promise((r) => setTimeout(r, 1500));
 
-    // ✅ Ensure main content exists
-    const hasContent = await page.evaluate(() => {
-      return document.body && document.body.innerText.length > 50;
-    });
+    // ✅ Deterministic check: detect unauthorized/not found messages
+    const bodyText = await page.evaluate(() => (document.body?.innerText || '').trim());
 
-    if (!hasContent) {
-      throw new Error('PRINT_PAGE_EMPTY_OR_UNAUTHORIZED');
+    if (!bodyText || bodyText.length < 30) {
+      throw new Error('PRINT_PAGE_EMPTY');
     }
 
+    if (/Unauthorized|Invalid or expired link|Not found/i.test(bodyText)) {
+      throw new Error(`PRINT_PAGE_UNAUTHORIZED_OR_NOT_FOUND: ${bodyText.slice(0, 140)}`);
+    }
+
+    // ✅ Now generate PDF
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -129,10 +142,8 @@ export async function POST(req: NextRequest) {
       throw new Error('INVALID_PDF_BUFFER');
     }
 
-    await ref.set(
-      { exports: { date: today, count: todaysCount + 1 } },
-      { merge: true }
-    );
+    // Increment export usage
+    await ref.set({ exports: { date: today, count: todaysCount + 1 } }, { merge: true });
 
     return new Response(pdfBuffer, {
       status: 200,
@@ -140,11 +151,12 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${safeFilename(type)}"`,
         'Cache-Control': 'no-store',
+        'X-PDF-Bytes': String(pdfBuffer.length),
       },
     });
   } catch (err: any) {
     return Response.json(
-      { ok: false, error: 'PDF export failed', detail: err.message },
+      { ok: false, error: 'PDF export failed', detail: err?.message || String(err) },
       { status: 500 }
     );
   } finally {
