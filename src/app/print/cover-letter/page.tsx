@@ -62,7 +62,8 @@ export default async function PrintCoverLetterPage({
     return (
       <PrintLayout title="Not Found" watermarkEnabled={wmEnabled}>
         <h1>Not found</h1>
-        <p className="muted">Cover letter not found.</p>
+        <p className="muted">Cover Letter document not found for ID: {coverLetterId}</p>
+
       </PrintLayout>
     );
   }

@@ -66,7 +66,7 @@ export default async function PrintResumePage({
     return (
       <PrintLayout title="Not Found" watermarkEnabled={wmEnabled}>
         <h1>Not found</h1>
-        <p className="small">Builder document not found.</p>
+        <p className="muted">Builder document not found for ID: {builderId}</p>
       </PrintLayout>
     );
   }

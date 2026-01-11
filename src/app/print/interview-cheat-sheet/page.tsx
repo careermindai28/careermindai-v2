@@ -63,7 +63,7 @@ export default async function PrintCheatSheetPage({
     return (
       <PrintLayout title="Not Found" watermarkEnabled={wmEnabled}>
         <h1>Not found</h1>
-        <p className="muted">Cheat sheet not found.</p>
+        <p className="muted">Cheat sheet not found for ID: {sheetId}</p>
       </PrintLayout>
     );
   }

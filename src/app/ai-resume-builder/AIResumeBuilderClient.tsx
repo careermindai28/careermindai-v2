@@ -251,27 +251,28 @@ export default function AIResumeBuilderClient() {
     }
   };
 
-  const handleDownloadResumePdf = async () => {
-    const id = (data?.builderId || builderIdFromUrl || '').trim();
-    if (!id) {
-      setErr('Missing builderId. Please generate the resume first.');
-      return;
-    }
+const handleDownloadResumePdf = async () => {
+  const id = (data?.builderId || builderIdFromUrl || '').trim();
+  if (!id) {
+    setErr('Missing builderId. Please generate the resume first.');
+    return;
+  }
 
-    setPdfLine(getCareerMindAILoadingLine());
-    await downloadPdf('resume', id, {
-      onStart: () => setPdfLoading(true),
-      onDone: () => {
-        setPdfLoading(false);
-        setPdfLine('');
-      },
-      onError: (msg) => {
-        setPdfLoading(false);
-        setPdfLine('');
-        setErr(msg); // show inline error
-      },
-    });
-  };
+  setPdfLine(getCareerMindAILoadingLine());
+  await downloadPdf('resume', id, {
+    onStart: () => setPdfLoading(true),
+    onDone: () => {
+      setPdfLoading(false);
+      setPdfLine('');
+    },
+    onError: (msg) => {
+      setPdfLoading(false);
+      setPdfLine('');
+      setErr(msg);
+    },
+  });
+};
+
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
