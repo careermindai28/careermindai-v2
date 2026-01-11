@@ -10,11 +10,8 @@ function base64url(input: Buffer) {
     .replace(/\//g, '_');
 }
 
-/**
- * One canonical payload builder used by BOTH sign and verify.
- * This eliminates hidden differences that cause "Invalid or expired link".
- */
 function canonicalPayload(p: { type: PdfType; id: string; exp: number }) {
+  // One exact canonical payload (must match in both sign & verify)
   return JSON.stringify({
     type: String(p.type),
     id: String(p.id),
@@ -40,7 +37,6 @@ export function verifyPdfUrl(p: { type: PdfType; id: string; exp: number; sig: s
 
   const expected = signPdfUrl({ type: p.type, id: p.id, exp: p.exp });
 
-  // timingSafeEqual throws if lengths differ
   const a = Buffer.from(expected);
   const b = Buffer.from(String(p.sig || ''));
   if (a.length !== b.length) return false;
