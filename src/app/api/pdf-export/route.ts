@@ -138,7 +138,7 @@ const ent = getEntitlements(effectivePlan, email);
     const wm = watermarkEnabled ? '1' : '0';
 
     // Signed URL valid for 5 minutes
-    const exp = Math.floor(Date.now() / 1000) + 60 * 60; // 1 hour
+    const exp = Math.floor(Date.now() / 1000) + 60 * 60; // 1 HOUR
     const sig = signPdfUrl({ type, id, exp });
 
     let printUrl = '';

@@ -157,41 +157,44 @@ export default function ResumeAuditInteractive() {
   };
 
   const handleExportPDF = () => {
-  // Works immediately: opens a print-friendly page of the audit results and user can "Save as PDF"
-  // (true server PDF export is for resume/cover-letter/interview guide, which use /api/pdf-export)
-  try {
-    const html = document.documentElement.outerHTML;
-    const w = window.location.href('', '_blank', 'noopener,noreferrer');
-    if (!w) return;
+    try {
+      const auditContainer = document.querySelector('[data-audit-results]');
+      if (!auditContainer) {
+        alert('Nothing to export');
+        return;
+      }
 
-    w.document.open();
-    w.document.write(`
+      const win = window.open('', '_blank', 'noopener,noreferrer');
+      if (!win) {
+        alert('Popup blocked. Please allow popups.');
+        return;
+      }
+
+      win.document.open();
+      win.document.write(`
       <html>
         <head>
-          <title>CareerMindAI - Resume Audit</title>
+          <title>CareerMindAI – Resume Audit Report</title>
           <meta charset="utf-8" />
           <style>
-            body { font-family: Arial, sans-serif; padding: 24px; }
-            .no-print { display: none; }
+            body { font-family: Inter, Arial, sans-serif; padding: 24px; }
+            button { display: none !important; }
           </style>
         </head>
         <body>
-          <h1>CareerMindAI — Resume Audit Summary</h1>
-          <p style="color:#666">Tip: Use your browser’s Print → Save as PDF.</p>
-          <hr/>
-          ${document.querySelector('.max-w-5xl')?.innerHTML || ''}
+          <h1>Resume Audit Report</h1>
+          ${auditContainer.innerHTML}
           <script>
-            window.onload = () => setTimeout(() => window.print(), 400);
+            window.onload = () => setTimeout(() => window.print(), 300);
           </script>
         </body>
       </html>
     `);
-    w.document.close();
-  } catch {
-    alert('Export failed. Please try again.');
-  }
-};
-
+      win.document.close();
+    } catch (e) {
+      alert('Export failed. Please try again.');
+    }
+  };
 
   const handleStartOver = () => {
     setSelectedFile(null);
@@ -241,7 +244,10 @@ export default function ResumeAuditInteractive() {
         )}
 
         {!auditResults ? (
-          <div className="bg-surface border border-border rounded-xl p-6 space-y-6">
+          <div
+            data-audit-results
+            className="bg-surface border border-border rounded-xl p-6 space-y-6"
+          >
             {!user && freeAuditUsed ? (
               <div className="rounded-xl border border-border bg-background p-4">
                 <div className="font-semibold text-foreground">Free audit used</div>
@@ -288,7 +294,11 @@ export default function ResumeAuditInteractive() {
               </button>
             </div>
 
-            <AuditResults results={auditResults} onExportPDF={handleExportPDF} onStartOver={handleStartOver} />
+            <AuditResults
+              results={auditResults}
+              onExportPDF={handleExportPDF}
+              onStartOver={handleStartOver}
+            />
           </>
         )}
       </div>
