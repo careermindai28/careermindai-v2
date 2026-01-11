@@ -14,6 +14,10 @@ function mustString(v: any) {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+function isPdfType(v: string): v is PdfType {
+  return v === 'resume' || v === 'coverLetter' || v === 'interviewGuide';
+}
+
 function safeFilename(type: PdfType) {
   if (type === 'resume') return 'CareerMindAI-Resume.pdf';
   if (type === 'coverLetter') return 'CareerMindAI-CoverLetter.pdf';
@@ -50,8 +54,19 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const type = mustString(body?.type) as PdfType;
+    const rawType = mustString(body?.type);
     const id = mustString(body?.id);
+
+    if (!rawType || !id) {
+      return Response.json({ ok: false, error: 'Missing type or id' }, { status: 400 });
+    }
+    if (!isPdfType(rawType)) {
+      return Response.json(
+        { ok: false, error: `Invalid type. Must be one of: resume, coverLetter, interviewGuide` },
+        { status: 400 }
+      );
+    }
+    const type: PdfType = rawType;
 
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -74,10 +89,6 @@ export async function POST(req: NextRequest) {
         },
         { status: 401 }
       );
-    }
-
-    if (!type || !id) {
-      return Response.json({ ok: false, error: 'Missing type or id' }, { status: 400 });
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -127,11 +138,12 @@ export async function POST(req: NextRequest) {
       printUrl = `${baseUrl}/print/resume?builderId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else if (type === 'coverLetter') {
       printUrl = `${baseUrl}/print/cover-letter?coverLetterId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
-    } else if (type === 'interviewGuide') {
-      printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else {
-      return Response.json({ ok: false, error: 'Invalid type' }, { status: 400 });
+      printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     }
+
+    // If you ever need to debug signature issues, temporarily return this JSON:
+    // return Response.json({ ok: true, debug: { type, id, exp, sig, printUrl } });
 
     const executablePath = await chromium.executablePath();
 
