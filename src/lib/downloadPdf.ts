@@ -13,9 +13,17 @@ type DownloadPdfOpts = {
   onStart?: () => void;
   onDone?: () => void;
   onError?: (msg: string) => void;
-  onLimit?: (msg: string) => void; // ✅ NEW: trigger upgrade modal
-  onUnauthorized?: (msg: string) => void; // ✅ optional
+  onLimit?: (msg: string) => void;
+  onUnauthorized?: (msg: string) => void;
 };
+
+async function safeJson(res: Response) {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
 
 export async function downloadPdf(
   type: PdfType,
@@ -47,25 +55,25 @@ export async function downloadPdf(
       body: JSON.stringify({ type, id }),
     });
 
-    if (res.status === 402) {
-      const data = await res.json().catch(() => null);
-      const msg = data?.error || 'Daily export limit reached. Upgrade to export unlimited PDFs.';
-      opts?.onLimit?.(msg); // ✅ open upgrade modal
-      opts?.onError?.(msg); // ✅ still show inline message if you want
-      return { ok: false, code: 'EXPORT_LIMIT_REACHED', message: msg, status: 402 };
-    }
-
-    if (res.status === 401 || res.status === 403) {
-      const data = await res.json().catch(() => null);
-      const msg = data?.error || 'Unauthorized. Please sign in again.';
-      opts?.onUnauthorized?.(msg);
-      opts?.onError?.(msg);
-      return { ok: false, code: 'UNAUTHORIZED', message: msg, status: res.status };
-    }
-
+    // Handle non-200s with readable errors
     if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      const msg = data?.error || 'PDF export failed.';
+      const data = await safeJson(res);
+      const err = data?.error || 'PDF export failed.';
+      const detail = data?.detail ? ` (${data.detail})` : '';
+      const msg = `${err}${detail}`;
+
+      if (res.status === 402) {
+        opts?.onLimit?.(msg);
+        opts?.onError?.(msg);
+        return { ok: false, code: 'EXPORT_LIMIT_REACHED', message: msg, status: 402 };
+      }
+
+      if (res.status === 401 || res.status === 403) {
+        opts?.onUnauthorized?.(msg);
+        opts?.onError?.(msg);
+        return { ok: false, code: 'UNAUTHORIZED', message: msg, status: res.status };
+      }
+
       opts?.onError?.(msg);
       return { ok: false, code: 'FAILED', message: msg, status: res.status };
     }

@@ -1,8 +1,6 @@
-// src/app/api/pdf-export/route.ts
 import { NextRequest } from 'next/server';
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
-import path from 'path';
 import { signPdfUrl } from '@/lib/pdfSign';
 
 import { getAdminAuth, getAdminDb } from '@/lib/firebaseAdmin';
@@ -11,7 +9,6 @@ import { getEntitlements } from '@/lib/entitlements';
 export const runtime = 'nodejs';
 
 type PdfType = 'resume' | 'coverLetter' | 'interviewGuide';
-type Plan = 'FREE' | 'PAID' | 'ADMIN';
 
 function mustString(v: any) {
   return typeof v === 'string' ? v.trim() : '';
@@ -37,7 +34,7 @@ async function getUserPlanAndUsage(uid: string) {
 
   const data = snap.exists ? (snap.data() as any) : {};
   const plan = (data?.plan as string) || 'FREE';
-  const paidUntil = data?.paidUntil || null; // Firestore Timestamp or string
+  const paidUntil = data?.paidUntil || null;
 
   const today = ymd();
   const exports = data?.exports || {};
@@ -48,97 +45,81 @@ async function getUserPlanAndUsage(uid: string) {
   return { ref, plan, paidUntil, today, todaysCount };
 }
 
-
 export async function POST(req: NextRequest) {
+  let browser: puppeteer.Browser | null = null;
+
   try {
     const body = await req.json().catch(() => ({}));
     const type = mustString(body?.type) as PdfType;
     const id = mustString(body?.id);
 
-    // 🔐 Auth header
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
     if (!token) {
-      return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify Firebase ID token
     let uid = '';
     let email: string | null = null;
-
     try {
       const decoded = await getAdminAuth().verifyIdToken(token);
       uid = decoded.uid;
       email = typeof (decoded as any).email === 'string' ? (decoded as any).email : null;
     } catch (err: any) {
-      return new Response(
-        JSON.stringify({
+      return Response.json(
+        {
           ok: false,
           error: 'Unauthorized (invalid session). Please sign out and sign in again.',
           detail: err?.code || err?.message || 'verifyIdToken_failed',
-        }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+        },
+        { status: 401 }
       );
     }
 
     if (!type || !id) {
-      return new Response(JSON.stringify({ ok: false, error: 'Missing type or id' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return Response.json({ ok: false, error: 'Missing type or id' }, { status: 400 });
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
     if (!baseUrl) {
-      return new Response(JSON.stringify({ ok: false, error: 'Missing NEXT_PUBLIC_APP_URL' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return Response.json({ ok: false, error: 'Missing NEXT_PUBLIC_APP_URL' }, { status: 500 });
     }
 
-    // ✅ Monetization rules
-    
     const { ref, plan, paidUntil, today, todaysCount } = await getUserPlanAndUsage(uid);
 
-// if paidUntil exists but is expired, treat as FREE
-let effectivePlan = plan;
-try {
-  const ms =
-    typeof paidUntil?.toMillis === 'function'
-      ? paidUntil.toMillis()
-      : typeof paidUntil === 'string'
-        ? Date.parse(paidUntil)
-        : typeof paidUntil === 'number'
-          ? paidUntil
-          : NaN;
+    // paidUntil expiry -> FREE
+    let effectivePlan = plan;
+    try {
+      const ms =
+        typeof paidUntil?.toMillis === 'function'
+          ? paidUntil.toMillis()
+          : typeof paidUntil === 'string'
+            ? Date.parse(paidUntil)
+            : typeof paidUntil === 'number'
+              ? paidUntil
+              : NaN;
 
-  if (Number.isFinite(ms) && ms < Date.now()) effectivePlan = 'FREE';
-} catch {}
+      if (Number.isFinite(ms) && ms < Date.now()) effectivePlan = 'FREE';
+    } catch {}
 
-const ent = getEntitlements(effectivePlan, email);
-
+    const ent = getEntitlements(effectivePlan, email);
 
     if (todaysCount >= ent.exportLimitPerDay) {
-      return new Response(
-        JSON.stringify({
+      return Response.json(
+        {
           ok: false,
           code: 'EXPORT_LIMIT_REACHED',
           error: 'Daily export limit reached. Upgrade to export unlimited PDFs.',
           plan: ent.plan,
           limit: ent.exportLimitPerDay,
-        }),
-        { status: 402, headers: { 'Content-Type': 'application/json' } }
+        },
+        { status: 402 }
       );
     }
 
-    const watermarkEnabled = ent.watermarkOnExports;
-    const wm = watermarkEnabled ? '1' : '0';
+    const wm = ent.watermarkOnExports ? '1' : '0';
 
-    // Signed URL valid for 5 minutes
-    const exp = Math.floor(Date.now() / 1000) + 60 * 60; // 1 HOUR
+    const exp = Math.floor(Date.now() / 1000) + 60 * 60; // 1 hour
     const sig = signPdfUrl({ type, id, exp });
 
     let printUrl = '';
@@ -149,53 +130,56 @@ const ent = getEntitlements(effectivePlan, email);
     } else if (type === 'interviewGuide') {
       printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else {
-      return new Response(JSON.stringify({ ok: false, error: 'Invalid type' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return Response.json({ ok: false, error: 'Invalid type' }, { status: 400 });
     }
 
-    // Puppeteer + chromium
-    const inputDir = path.join(process.cwd(), 'node_modules', '@sparticuz', 'chromium', 'bin');
-    const executablePath = await chromium.executablePath(inputDir);
+    const executablePath = await chromium.executablePath();
 
-    const browser = await puppeteer.launch({
-      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+    browser = await puppeteer.launch({
       executablePath,
-      headless: true,
+      headless: chromium.headless,
+      args: [
+        ...chromium.args,
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+      ],
     });
 
-    try {
-      const page = await browser.newPage();
-      await page.setViewport({ width: 1240, height: 1754, deviceScaleFactor: 1 });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1240, height: 1754, deviceScaleFactor: 1 });
 
-      await page.goto(printUrl, { waitUntil: 'networkidle2', timeout: 60_000 });
+    await page.goto(printUrl, { waitUntil: 'networkidle2', timeout: 60_000 });
 
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        displayHeaderFooter: false,
-        margin: { top: '14mm', right: '14mm', bottom: '14mm', left: '14mm' },
-      });
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      displayHeaderFooter: false,
+      margin: { top: '14mm', right: '14mm', bottom: '14mm', left: '14mm' },
+    });
 
-      // ✅ increment only on success
-      await ref.set({ exports: { date: today, count: todaysCount + 1 } }, { merge: true });
+    await ref.set({ exports: { date: today, count: todaysCount + 1 } }, { merge: true });
 
-      return new Response(new Uint8Array(pdfBuffer), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${safeFilename(type)}"`,
-          'Cache-Control': 'no-store',
-        },
-      });
-    } finally {
-      await browser.close();
-    }
+    return new Response(new Uint8Array(pdfBuffer), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${safeFilename(type)}"`,
+        'Cache-Control': 'no-store',
+      },
+    });
   } catch (err: any) {
-    return new Response(
-      JSON.stringify({ ok: false, error: err?.message || 'PDF export failed.' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    return Response.json(
+      {
+        ok: false,
+        error: 'PDF export failed',
+        detail: err?.message || String(err),
+      },
+      { status: 500 }
     );
+  } finally {
+    try {
+      if (browser) await browser.close();
+    } catch {}
   }
 }

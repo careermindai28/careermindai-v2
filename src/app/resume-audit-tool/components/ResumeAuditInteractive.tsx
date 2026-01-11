@@ -156,6 +156,7 @@ export default function ResumeAuditInteractive() {
     router.push(nextPath);
   };
 
+  // ✅ Browser print → Save as PDF
   const handleExportPDF = () => {
     try {
       const auditContainer = document.querySelector('[data-audit-results]');
@@ -172,26 +173,26 @@ export default function ResumeAuditInteractive() {
 
       win.document.open();
       win.document.write(`
-      <html>
-        <head>
-          <title>CareerMindAI – Resume Audit Report</title>
-          <meta charset="utf-8" />
-          <style>
-            body { font-family: Inter, Arial, sans-serif; padding: 24px; }
-            button { display: none !important; }
-          </style>
-        </head>
-        <body>
-          <h1>Resume Audit Report</h1>
-          ${auditContainer.innerHTML}
-          <script>
-            window.onload = () => setTimeout(() => window.print(), 300);
-          </script>
-        </body>
-      </html>
-    `);
+        <html>
+          <head>
+            <title>CareerMindAI – Resume Audit Report</title>
+            <meta charset="utf-8" />
+            <style>
+              body { font-family: Inter, Arial, sans-serif; padding: 24px; }
+              button { display: none !important; }
+            </style>
+          </head>
+          <body>
+            <h1>Resume Audit Report</h1>
+            ${auditContainer.innerHTML}
+            <script>
+              window.onload = () => setTimeout(() => window.print(), 300);
+            </script>
+          </body>
+        </html>
+      `);
       win.document.close();
-    } catch (e) {
+    } catch {
       alert('Export failed. Please try again.');
     }
   };
@@ -204,7 +205,6 @@ export default function ResumeAuditInteractive() {
   };
 
   const saveLead = async (email: string) => {
-    // Best-effort lead capture; do not block user if it fails.
     await fetch('/api/leads', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -228,7 +228,6 @@ export default function ResumeAuditInteractive() {
         onClose={() => setEmailModalOpen(false)}
         onSubmit={async (email) => {
           await saveLead(email);
-          // Move user into the authenticated journey.
           const nextPath = auditId
             ? `/ai-resume-builder?auditId=${encodeURIComponent(auditId)}`
             : '/user-dashboard';
@@ -244,10 +243,7 @@ export default function ResumeAuditInteractive() {
         )}
 
         {!auditResults ? (
-          <div
-            data-audit-results
-            className="bg-surface border border-border rounded-xl p-6 space-y-6"
-          >
+          <div className="bg-surface border border-border rounded-xl p-6 space-y-6">
             {!user && freeAuditUsed ? (
               <div className="rounded-xl border border-border bg-background p-4">
                 <div className="font-semibold text-foreground">Free audit used</div>
@@ -294,11 +290,14 @@ export default function ResumeAuditInteractive() {
               </button>
             </div>
 
-            <AuditResults
-              results={auditResults}
-              onExportPDF={handleExportPDF}
-              onStartOver={handleStartOver}
-            />
+            {/* ✅ IMPORTANT: wrap the ACTUAL results */}
+            <div data-audit-results>
+              <AuditResults
+                results={auditResults}
+                onExportPDF={handleExportPDF}
+                onStartOver={handleStartOver}
+              />
+            </div>
           </>
         )}
       </div>
