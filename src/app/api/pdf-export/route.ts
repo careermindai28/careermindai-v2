@@ -37,14 +37,12 @@ async function getUserPlanAndUsage(uid: string) {
   const snap = await ref.get();
 
   const data = snap.exists ? (snap.data() as any) : {};
-  const plan = (data?.plan as string) || 'FREE';
+  const plan = data?.plan || 'FREE';
   const paidUntil = data?.paidUntil || null;
 
   const today = ymd();
   const exports = data?.exports || {};
-  const exportsDate = exports?.date || '';
-  const exportsCount = Number(exports?.count || 0);
-  const todaysCount = exportsDate === today ? exportsCount : 0;
+  const todaysCount = exports?.date === today ? Number(exports?.count || 0) : 0;
 
   return { ref, plan, paidUntil, today, todaysCount };
 }
@@ -57,14 +55,8 @@ export async function POST(req: NextRequest) {
     const rawType = mustString(body?.type);
     const id = mustString(body?.id);
 
-    if (!rawType || !id) {
-      return Response.json({ ok: false, error: 'Missing type or id' }, { status: 400 });
-    }
-    if (!isPdfType(rawType)) {
-      return Response.json(
-        { ok: false, error: 'Invalid type. Must be: resume | coverLetter | interviewGuide' },
-        { status: 400 }
-      );
+    if (!rawType || !id || !isPdfType(rawType)) {
+      return Response.json({ ok: false, error: 'Invalid request' }, { status: 400 });
     }
     const type: PdfType = rawType;
 
@@ -74,128 +66,73 @@ export async function POST(req: NextRequest) {
       return Response.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    let uid = '';
-    let email: string | null = null;
+    const decoded = await getAdminAuth().verifyIdToken(token);
+    const uid = decoded.uid;
+    const email = (decoded as any)?.email || null;
 
-    try {
-      const decoded = await getAdminAuth().verifyIdToken(token);
-      uid = decoded.uid;
-      email = typeof (decoded as any).email === 'string' ? (decoded as any).email : null;
-    } catch (err: any) {
-      return Response.json(
-        {
-          ok: false,
-          error: 'Unauthorized (invalid session). Please sign out and sign in again.',
-          detail: err?.code || err?.message || 'verifyIdToken_failed',
-        },
-        { status: 401 }
-      );
-    }
-
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-    if (!baseUrl) {
-      return Response.json({ ok: false, error: 'Missing NEXT_PUBLIC_APP_URL' }, { status: 500 });
-    }
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!baseUrl) throw new Error('Missing NEXT_PUBLIC_APP_URL');
 
     const { ref, plan, paidUntil, today, todaysCount } = await getUserPlanAndUsage(uid);
-
-    // paidUntil expiry -> FREE
-    let effectivePlan = plan;
-    try {
-      const ms =
-        typeof paidUntil?.toMillis === 'function'
-          ? paidUntil.toMillis()
-          : typeof paidUntil === 'string'
-            ? Date.parse(paidUntil)
-            : typeof paidUntil === 'number'
-              ? paidUntil
-              : NaN;
-
-      if (Number.isFinite(ms) && ms < Date.now()) effectivePlan = 'FREE';
-    } catch {}
-
-    const ent = getEntitlements(effectivePlan, email);
+    const ent = getEntitlements(plan, email);
 
     if (todaysCount >= ent.exportLimitPerDay) {
       return Response.json(
-        {
-          ok: false,
-          code: 'EXPORT_LIMIT_REACHED',
-          error: 'Daily export limit reached. Upgrade to export unlimited PDFs.',
-          plan: ent.plan,
-          limit: ent.exportLimitPerDay,
-        },
+        { ok: false, error: 'Daily export limit reached' },
         { status: 402 }
       );
     }
 
     const wm = ent.watermarkOnExports ? '1' : '0';
-
-    // Long expiry so it won’t expire mid-render
-    const exp = Math.floor(Date.now() / 1000) + 60 * 60; // 1 hour
+    const exp = Math.floor(Date.now() / 1000) + 60 * 60;
     const sig = signPdfUrl({ type, id, exp });
 
-    let printUrl = '';
-    if (type === 'resume') {
-      printUrl = `${baseUrl}/print/resume?builderId=${encodeURIComponent(
-        id
-      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
-    } else if (type === 'coverLetter') {
-      printUrl = `${baseUrl}/print/cover-letter?coverLetterId=${encodeURIComponent(
-        id
-      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
-    } else {
-      printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(
-        id
-      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
-    }
+    const printUrl =
+      type === 'resume'
+        ? `${baseUrl}/print/resume?builderId=${id}&wm=${wm}&exp=${exp}&sig=${sig}`
+        : type === 'coverLetter'
+        ? `${baseUrl}/print/cover-letter?coverLetterId=${id}&wm=${wm}&exp=${exp}&sig=${sig}`
+        : `${baseUrl}/print/interview-guide?guideId=${id}&wm=${wm}&exp=${exp}&sig=${sig}`;
 
     const executablePath = await chromium.executablePath();
 
     browser = await puppeteer.launch({
       executablePath,
       headless: chromium.headless,
-      args: [
-        ...chromium.args,
-        '--disable-dev-shm-usage',
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-      ],
+      args: chromium.args,
     });
 
     const page = await browser.newPage();
-    await page.setViewport({ width: 1240, height: 1754, deviceScaleFactor: 1 });
+    await page.setViewport({ width: 1240, height: 1754 });
 
-    const resp = await page.goto(printUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    const status = resp?.status() || 0;
+    const response = await page.goto(printUrl, { waitUntil: 'domcontentloaded' });
 
-    // Wait for page to settle
-    await page.waitForTimeout(600);
-    await page.waitForFunction(() => document.readyState === 'complete', { timeout: 30_000 });
+    // ✅ SAFE wait — compatible with ALL puppeteer versions
+    await new Promise((r) => setTimeout(r, 800));
 
-    // Detect Unauthorized / Not found pages before pdf()
-    const bodyText = await page.evaluate(() => document.body?.innerText || '');
-    if (status >= 400 || /Unauthorized|Invalid or expired link|Not found/i.test(bodyText)) {
-      throw new Error(`PRINT_PAGE_REJECTED: status=${status} text=${bodyText.slice(0, 120)}`);
+    // ✅ Ensure main content exists
+    const hasContent = await page.evaluate(() => {
+      return document.body && document.body.innerText.length > 50;
+    });
+
+    if (!hasContent) {
+      throw new Error('PRINT_PAGE_EMPTY_OR_UNAUTHORIZED');
     }
 
-    const pdfBuffer: Buffer = await page.pdf({
+    const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      displayHeaderFooter: false,
       margin: { top: '14mm', right: '14mm', bottom: '14mm', left: '14mm' },
     });
 
-    // Validate PDF bytes
-    if (!pdfBuffer || pdfBuffer.length < 100) {
-      throw new Error(`EMPTY_PDF_BUFFER: length=${pdfBuffer?.length || 0}`);
-    }
-    const header = pdfBuffer.slice(0, 4).toString('utf8');
-    if (header !== '%PDF') {
-      throw new Error(`INVALID_PDF_HEADER: got=${JSON.stringify(header)}`);
+    if (!pdfBuffer || pdfBuffer.length < 500) {
+      throw new Error('INVALID_PDF_BUFFER');
     }
 
-    await ref.set({ exports: { date: today, count: todaysCount + 1 } }, { merge: true });
+    await ref.set(
+      { exports: { date: today, count: todaysCount + 1 } },
+      { merge: true }
+    );
 
     return new Response(pdfBuffer, {
       status: 200,
@@ -203,16 +140,11 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${safeFilename(type)}"`,
         'Cache-Control': 'no-store',
-        'X-PDF-Bytes': String(pdfBuffer.length),
       },
     });
   } catch (err: any) {
     return Response.json(
-      {
-        ok: false,
-        error: 'PDF export failed',
-        detail: err?.message || String(err),
-      },
+      { ok: false, error: 'PDF export failed', detail: err.message },
       { status: 500 }
     );
   } finally {
