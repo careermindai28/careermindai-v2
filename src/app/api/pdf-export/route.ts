@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
     }
 
     // If you ever need to debug signature issues, temporarily return this JSON:
-    // return Response.json({ ok: true, debug: { type, id, exp, sig, printUrl } });
+     return Response.json({ ok: true, debug: { type, id, exp, sig, printUrl } });
 
     const executablePath = await chromium.executablePath();
 
