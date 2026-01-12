@@ -64,7 +64,6 @@ export default async function PrintInterviewGuidePage({
       <PrintLayout title="Not Found" watermarkEnabled={wmEnabled}>
         <h1>Not found</h1>
         <p className="small">Guide document not found for ID: {guideId}</p>
-
       </PrintLayout>
     );
   }

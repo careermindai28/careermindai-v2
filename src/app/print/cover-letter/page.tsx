@@ -63,7 +63,6 @@ export default async function PrintCoverLetterPage({
       <PrintLayout title="Not Found" watermarkEnabled={wmEnabled}>
         <h1>Not found</h1>
         <p className="muted">Cover Letter document not found for ID: {coverLetterId}</p>
-
       </PrintLayout>
     );
   }
@@ -77,7 +76,6 @@ export default async function PrintCoverLetterPage({
 
   return (
     <PrintLayout title="Cover Letter" watermarkEnabled={wmEnabled}>
-      <h1>Cover Letter</h1>
       {subjectLine && <div className="badge">{subjectLine}</div>}
       <div className="hr" />
       {paras.map((p, i) => (

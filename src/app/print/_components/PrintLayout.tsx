@@ -11,7 +11,6 @@ export default function PrintLayout({
 }) {
   return (
     <div>
-      {/* title is kept for semantic use; puppeteer will still capture HTML */}
       <style>{`
         @page { size: A4; margin: 14mm; }
         html, body { padding: 0; margin: 0; }
@@ -24,6 +23,7 @@ export default function PrintLayout({
           print-color-adjust: exact;
           background: #fff;
         }
+
         .page { position: relative; min-height: 100%; }
         .wm {
           position: fixed;
@@ -43,16 +43,33 @@ export default function PrintLayout({
           user-select: none;
           white-space: nowrap;
         }
+
         .content { position: relative; z-index: 1; }
 
-        h1 { font-size: 20px; margin: 0 0 10px; }
-        h2 { font-size: 14px; margin: 14px 0 8px; }
+        /* Typography */
+        h1 {
+          font-size: 20px;
+          font-weight: 800;
+          margin: 0 0 10px;
+          letter-spacing: -0.2px;
+        }
+        h2 {
+          font-size: 14px;
+          font-weight: 800;
+          margin: 14px 0 8px;
+          letter-spacing: -0.1px;
+        }
         p  { margin: 0 0 8px; }
+
         ul { margin: 6px 0 10px 18px; padding: 0; }
         li { margin: 0 0 6px; }
+
+        b, strong { font-weight: 800; }
+
         .hr { height: 1px; background: #e5e7eb; margin: 10px 0 12px; }
-        .muted { color: #6b7280; font-size: 11.5px; }
-        .small { color: #6b7280; font-size: 11.5px; }
+
+        .muted, .small { color: #6b7280; font-size: 11.5px; }
+
         .badge {
           display: inline-block;
           padding: 4px 8px;
@@ -61,10 +78,21 @@ export default function PrintLayout({
           font-size: 11px;
           color: #374151;
           background: #f9fafb;
+          font-weight: 600;
+        }
+
+        .section-title { font-weight: 800; margin-top: 14px; }
+        .label { font-weight: 800; }
+
+        .row {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 12px;
         }
       `}</style>
 
-      {/* Keep a hidden title so it's not wasted */}
+      {/* Hidden semantic title */}
       <div style={{ display: 'none' }}>{title}</div>
 
       <div className="page">
